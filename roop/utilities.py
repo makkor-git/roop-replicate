@@ -14,6 +14,7 @@ import roop.globals
 
 TEMP_DIRECTORY = 'temp'
 TEMP_VIDEO_FILE = 'temp.mp4'
+TEMP_GIF_FILE = 'temp.gif'
 
 # monkey patch ssl for mac
 if platform.system().lower() == 'darwin':
@@ -61,11 +62,23 @@ def create_video(target_path: str, fps: float = 30) -> bool:
     return run_ffmpeg(commands)
 
 
+def create_gif(target_path: str, fps: float = 30) -> bool:
+    temp_gif_output_path = get_temp_gif_output_path(target_path)
+    temp_directory_path = get_temp_directory_path(target_path)
+
+    commands = ['-framerate', str(fps), '-i',
+                os.path.join(temp_directory_path, '%04d.' + roop.globals.temp_frame_format),
+                temp_gif_output_path]
+
+    return run_ffmpeg(commands)
+
+
 def restore_audio(target_path: str, output_path: str) -> None:
     temp_output_path = get_temp_output_path(target_path)
     done = run_ffmpeg(['-i', temp_output_path, '-i', target_path, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-y', output_path])
     if not done:
         move_temp(target_path, output_path)
+        move_temp_gif(target_path, output_path)
 
 
 def get_temp_frame_paths(target_path: str) -> List[str]:
@@ -84,6 +97,11 @@ def get_temp_output_path(target_path: str) -> str:
     return os.path.join(temp_directory_path, TEMP_VIDEO_FILE)
 
 
+def get_temp_gif_output_path(target_path: str) -> str:
+    temp_directory_path = get_temp_directory_path(target_path)
+    return os.path.join(temp_directory_path, TEMP_GIF_FILE)
+
+
 def normalize_output_path(source_path: str, target_path: str, output_path: str) -> Optional[str]:
     if source_path and target_path and output_path:
         source_name, _ = os.path.splitext(os.path.basename(source_path))
@@ -100,6 +118,14 @@ def create_temp(target_path: str) -> None:
 
 def move_temp(target_path: str, output_path: str) -> None:
     temp_output_path = get_temp_output_path(target_path)
+    if os.path.isfile(temp_output_path):
+        if os.path.isfile(output_path):
+            os.remove(output_path)
+        shutil.move(temp_output_path, output_path)
+
+
+def move_temp_gif(target_path: str, output_path: str) -> None:
+    temp_output_path = get_temp_gif_output_path(target_path)
     if os.path.isfile(temp_output_path):
         if os.path.isfile(output_path):
             os.remove(output_path)
@@ -147,3 +173,7 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
 
 def resolve_relative_path(path: str) -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+
+
+def has_extension(filepath: str, extensions: List[str]) -> bool:
+    return filepath.lower().endswith(tuple(extensions))

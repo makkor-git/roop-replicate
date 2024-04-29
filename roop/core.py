@@ -2,6 +2,8 @@
 
 import os
 import sys
+
+
 # single thread doubles cuda performance - needs to be set before torch import
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '1'
@@ -20,7 +22,8 @@ import roop.metadata
 import roop.ui as ui
 from roop.predictor import predict_image, predict_video
 from roop.processors.frame.core import get_frame_processors_modules
-from roop.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from roop.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, has_extension, create_gif, move_temp_gif
+import roop.util_ffmpeg as ffmpeg
 
 warnings.filterwarnings('ignore', category=FutureWarning, module='insightface')
 warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
@@ -31,9 +34,9 @@ def parse_args() -> None:
     program = argparse.ArgumentParser(formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=100))
     program.add_argument('-s', '--source', help='select an source image', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
-    program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
+    program.add_argument('-o', '--output', help='select output file or directory', dest='output_path', default="output.gif")
     program.add_argument('--frame-processor', help='frame processors (choices: face_swapper, face_enhancer, ...)', dest='frame_processor', default=['face_swapper'], nargs='+')
-    program.add_argument('--keep-fps', help='keep target fps', dest='keep_fps', action='store_true')
+    program.add_argument('--keep-fps', help='keep target fps', dest='keep_fps', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true')
     program.add_argument('--skip-audio', help='skip target audio', dest='skip_audio', action='store_true')
     program.add_argument('--many-faces', help='process every face', dest='many_faces', action='store_true')
@@ -132,6 +135,7 @@ def start() -> None:
     for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
         if not frame_processor.pre_start():
             return
+
     # process image to image
     if has_image_extension(roop.globals.target_path):
         if predict_image(roop.globals.target_path):
@@ -148,11 +152,16 @@ def start() -> None:
         else:
             update_status('Processing to image failed!')
         return
+
     # process image to videos
     if predict_video(roop.globals.target_path):
         destroy()
     update_status('Creating temporary resources...')
     create_temp(roop.globals.target_path)
+    # converting gif to video
+    #if has_extension(roop.globals.target_path, ['gif']):
+    #    ffmpeg.create_gif_from_video(roop.globals.target_path, roop.globals.output_path)
+
     # extract frames
     if roop.globals.keep_fps:
         fps = detect_fps(roop.globals.target_path)
@@ -161,6 +170,7 @@ def start() -> None:
     else:
         update_status('Extracting frames with 30 FPS...')
         extract_frames(roop.globals.target_path)
+
     # process frame
     temp_frame_paths = get_temp_frame_paths(roop.globals.target_path)
     if temp_frame_paths:
@@ -171,30 +181,49 @@ def start() -> None:
     else:
         update_status('Frames not found...')
         return
+
     # create video
     if roop.globals.keep_fps:
         fps = detect_fps(roop.globals.target_path)
-        update_status(f'Creating video with {fps} FPS...')
-        create_video(roop.globals.target_path, fps)
-    else:
-        update_status('Creating video with 30 FPS...')
-        create_video(roop.globals.target_path)
-    # handle audio
-    if roop.globals.skip_audio:
-        move_temp(roop.globals.target_path, roop.globals.output_path)
-        update_status('Skipping audio...')
-    else:
-        if roop.globals.keep_fps:
-            update_status('Restoring audio...')
+        if has_extension(roop.globals.target_path, ['gif']):
+            update_status(f'Creating gif with {fps} FPS...')
+            create_gif(roop.globals.target_path, fps)
         else:
-            update_status('Restoring audio might cause issues as fps are not kept...')
-        restore_audio(roop.globals.target_path, roop.globals.output_path)
+            update_status(f'Creating video with {fps} FPS...')
+            create_video(roop.globals.target_path, fps)
+    else:
+        if has_extension(roop.globals.target_path, ['gif']):
+            update_status('Creating gif with 30 FPS...')
+            create_gif(roop.globals.target_path)
+        else:
+            update_status('Creating video with 30 FPS...')
+            create_video(roop.globals.target_path)
+        #if has_extension(roop.globals.target_path, ['gif']):
+        #    ffmpeg.create_gif_from_video(roop.globals.target_path, roop.globals.output_path)
+
+    if not has_extension(roop.globals.target_path, ['gif']):
+        # handle audio
+        if roop.globals.skip_audio:
+            move_temp(roop.globals.target_path, roop.globals.output_path)
+            update_status('Skipping audio...')
+        else:
+            if roop.globals.keep_fps:
+                update_status('Restoring audio...')
+            else:
+                update_status('Restoring audio might cause issues as fps are not kept...')
+            restore_audio(roop.globals.target_path, roop.globals.output_path)
+    else:
+        move_temp_gif(roop.globals.target_path, roop.globals.output_path);
+
     # clean temp
     update_status('Cleaning temporary resources...')
     clean_temp(roop.globals.target_path)
+
     # validate video
     if is_video(roop.globals.target_path):
         update_status('Processing to video succeed!')
+    elif has_extension(roop.globals.target_path, ['gif']):
+        update_status('Processing to gif succeed!')
     else:
         update_status('Processing to video failed!')
 
@@ -215,6 +244,27 @@ def run() -> None:
     limit_resources()
     if roop.globals.headless:
         start()
+    else:
+        window = ui.init(start, destroy)
+        window.mainloop()
+
+
+def run_replicate(source_path, target_path):
+    parse_args()
+    roop.globals.source_path = source_path
+    roop.globals.target_path = target_path
+    roop.globals.headless = True
+    roop.globals.execution_providers = ['DmlExecutionProvider']
+
+    if not pre_check():
+        return
+    for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
+        if not frame_processor.pre_check():
+            return
+    limit_resources()
+    if roop.globals.headless:
+        start()
+        return 'output.gif'
     else:
         window = ui.init(start, destroy)
         window.mainloop()
