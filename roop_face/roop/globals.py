@@ -17,6 +17,6 @@ temp_frame_quality: Optional[int] = 0
 output_video_encoder: Optional[str] = 'libx264'
 output_video_quality: Optional[int] = 35
 max_memory: Optional[int] = 8
-execution_providers: List[str] = ["gpu"]
+execution_providers: List[str] = ['CPUExecutionProvider']
 execution_threads: Optional[int] = 8
 log_level: str = 'error'

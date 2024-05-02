@@ -165,11 +165,28 @@ def destroy() -> None:
         clean_temp(roop.globals.target_path)
     sys.exit()
 
+
 def run_replicate(source_path, target_path):
+    signal.signal(signal.SIGINT, lambda signal_number, frame: destroy())
     roop.globals.source_path = source_path
     roop.globals.target_path = target_path
     roop.globals.headless = True
-    roop.globals.execution_providers = ['DmlExecutionProvider']
+    roop.globals.keep_fps = True
+    roop.globals.execution_providers = ['CPUExecutionProvider']
+    roop.globals.reference_face_position = 0
+    roop.globals.reference_frame_number = 0
+    roop.globals.similar_face_distance = 0.85
+    roop.globals.temp_frame_format = 'png'
+    roop.globals.temp_frame_quality = 0
+    roop.globals.output_video_encoder = 'libx264'
+    roop.globals.output_video_quality = 35
+    roop.globals.frame_processors = ['face_swapper']
+
+    if not pre_check():
+        return
+    for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
+        if not frame_processor.pre_check():
+            return
 
     if roop.globals.headless:
         start()
