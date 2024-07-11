@@ -70,6 +70,10 @@ def update_status(message: str, scope: str = 'ROOP.CORE') -> None:
 
 
 def start() -> None:
+    for frame_processor in get_frame_processors_modules(roop.globals.frame_processors):
+        if not frame_processor.pre_start():
+            return
+
     # process image to image
     if has_image_extension(roop.globals.target_path):
         if predict_image(roop.globals.target_path):
@@ -150,7 +154,7 @@ def start() -> None:
     # clean temp
     update_status('Cleaning temporary resources...')
     clean_temp(roop.globals.target_path)
-    
+
     # validate video
     if is_video(roop.globals.target_path):
         update_status('Processing to video succeed!')
@@ -173,6 +177,7 @@ def run_replicate(source_path, target_path):
     roop.globals.headless = True
     roop.globals.keep_fps = True
     roop.globals.execution_providers = ['CPUExecutionProvider']
+    roop.globals.execution_threads = 2
     roop.globals.reference_face_position = 0
     roop.globals.reference_frame_number = 0
     roop.globals.similar_face_distance = 0.85
