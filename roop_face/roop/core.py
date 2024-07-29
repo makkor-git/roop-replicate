@@ -158,8 +158,10 @@ def start() -> None:
     # validate video
     if is_video(roop.globals.target_path):
         update_status('Processing to video succeed!')
+        return roop.globals.output_path
     elif has_extension(roop.globals.target_path, ['gif']):
         update_status('Processing to gif succeed!')
+        return roop.globals.output_path
     else:
         update_status('Processing to video failed!')
 
@@ -194,6 +196,6 @@ def run_replicate(source_path, target_path):
             return
 
     if roop.globals.headless:
-        start()
-        return 'output.gif'
+        output = start()
+        return output
 

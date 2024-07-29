@@ -27,7 +27,10 @@ async def face_swap(source_image: UploadFile, target_gif: UploadFile):
     finish_time = time.time()
     print(f"Execution time: {finish_time - start_time}")
 
-    return FileResponse(output_gif)
+    if output_gif:
+        return FileResponse(output_gif)
+    else:
+        return output_gif
 
 if __name__ == '__main__':
     uvicorn.run(app, host="localhost", port=8000)
